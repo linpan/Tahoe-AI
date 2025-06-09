@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI Agents SDK 与 Stripe 争议管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        pre::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+            background-color: #374151;
+            border-radius: 4px;
+        }
+        pre::-webkit-scrollbar-thumb {
+            background-color: #10b981;
+            border-radius: 4px;
+        }
+        pre::-webkit-scrollbar-thumb:hover {
+            background-color: #059669;
+        }
+
+        .json-key { color: #6ee7b7; }
+        .json-string { color: #fcd34d; }
+        .json-number { color: #a78bfa; }
+        .json-boolean { color: #93c5fd; }
+        .json-null { color: #9ca3af; }
+        .comment, .python-comment { color: #6b7280; }
+        .python-keyword { color: #d8b4fe; }
+        .python-string { color: #fcd34d; }
+        .python-function { color: #7dd3fc; }
+        .python-class { color: #6ee7b7; }
+        .python-variable { color: #f3f4f6; }
+        .python-number { color: #a78bfa; }
+        .python-decorator { color: #f472b6; }
+
+        .slide {
+            opacity: 0;
+            transition: opacity 0.7s ease-in-out;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding-top: 2rem;
+            padding-bottom: 4rem;
+        }
+        .slide.active {
+            opacity: 1;
+        }
+        .slide ul {
+            list-style-position: outside;
+            padding-left: 1.75rem;
+        }
+        .slide ul li {
+            margin-bottom: 0.75rem;
+        }
+        .slide .content-wrapper {
+            width: 80%;
+            max-width: 1100px;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+         .slide blockquote {
+            border-left: 4px solid #10b981;
+            padding-left: 1.5rem;
+            margin: 1.5rem 0;
+            font-style: italic;
+            color: #a1a1aa;
+        }
+        .text-content p, .text-content li {
+            line-height: 1.75;
+            margin-bottom: 1rem;
+        }
+        .text-content h2, .text-content h3, .text-content h4 {
+            margin-bottom: 1.25rem;
+        }
+        pre {
+            padding: 1rem;
+            line-height: 1.6;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans">
+
+    <div id="presentation-container" class="relative w-full min-h-screen overflow-y-auto">
+
+        <!-- Slide 1: Title Slide -->
+        <div class="slide p-8 flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-emerald-900 to-gray-900 text-center">
+            <div class="w-full max-w-4xl">
+                <h1 class="text-5xl md:text-6xl font-extrabold mb-6 text-emerald-300 drop-shadow-lg">
+                    OpenAI Agents SDK
+                </h1>
+                <h2 class="text-3xl md:text-4xl font-semibold mb-8 text-emerald-200">
+                    结合 Stripe API 实现争议管理自动化
+                </h2>
+                <p class="text-sm text-gray-400 mt-12">基于 OpenAI Cookbook</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: Introduction -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">简介</h2>
+                <div class="text-lg space-y-4 text-left">
+                    <p>我们最近发布了新的开源 **Agents SDK**，旨在帮助您使用轻量级、易于使用且抽象最少的软件包构建 Agent 型 AI 应用。</p>
+                    <p>本 Cookbook 演示了如何利用 Agents SDK 结合 Stripe 的 API 来处理争议管理，这是许多企业面临的常见运营挑战。具体来说，我们关注两种真实场景：</p>
+                    <ol class="list-decimal ml-6 space-y-2">
+                        <li><strong>公司失误：</strong> 公司明显犯错的情况，例如未能履行订单，此时接受争议是适当的措施。</li>
+                        <li><strong>客户争议（最终销售）：</strong> 客户在收到正确商品并了解购买为最终销售的情况下故意对交易提出争议，需要进一步调查以收集支持证据。</li>
+                    </ol>
+                    <p>为应对这些场景，我们将引入三个不同的 Agent：</p>
+                    <ul class="list-disc ml-6 space-y-1">
+                        <li><strong>分诊 Agent (Triage Agent)：</strong> 根据订单的履行状态决定是接受还是升级争议。</li>
+                        <li><strong>受理 Agent (Acceptance Agent)：</strong> 通过自动接受争议并提供简洁的理由来处理明确的案例。</li>
+                        <li><strong>调查 Agent (Investigator Agent)：</strong> 通过分析通信记录和订单信息来对争议进行彻底调查，以收集必要证据。</li>
+                    </ul>
+                    <p>在本 Cookbook 中，我们将逐步指导您，说明自定义的 Agent 工作流如何自动化争议管理并支持您的业务运营。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Prerequisites -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">先决条件</h2>
+                <div class="text-lg space-y-4 text-left">
+                    <p>在运行本 Cookbook 之前，您必须设置以下账户并完成一些设置操作。这些先决条件对于与本项目中使用的 API 进行交互至关重要。</p>
+                    <h4 class="text-2xl font-semibold text-emerald-300 mt-4">1. OpenAI 账户</h4>
+                    <ul class="list-disc ml-6">
+                        <li><strong>目的：</strong> 您需要 OpenAI 账户才能访问语言模型并使用本 Cookbook 中的 Agents SDK。</li>
+                        <li><strong>操作：</strong> 如果您还没有 OpenAI 账户，请<a href="https://openai.com" target="_blank" class="text-emerald-300 hover:underline">注册一个</a>。拥有账户后，访问 <a href="https://platform.openai.com/api-keys" target="_blank" class="text-emerald-300 hover:underline">OpenAI API 密钥页面</a>创建一个 API 密钥。</li>
+                    </ul>
+                    <h4 class="text-2xl font-semibold text-emerald-300 mt-4">2. Stripe 账户</h4>
+                    <ul class="list-disc ml-6">
+                        <li><strong>目的：</strong> 需要 Stripe 账户来模拟支付处理、管理争议，并作为我们演示工作流的一部分与 Stripe API 交互。</li>
+                        <li><strong>操作：</strong> 访问 <a href="https://dashboard.stripe.com/register" target="_blank" class="text-emerald-300 hover:underline">Stripe 注册页面</a>创建一个免费的 Stripe 账户。</li>
+                        <li><strong>找到您的 API 密钥：</strong> 登录您的 Stripe 控制面板并导航至 **开发者 > API 密钥**。</li>
+                        <li><strong>使用测试模式：</strong> 在所有开发和测试中使用您的**测试密钥 (Test Secret Key)**。</li>
+                    </ul>
+                     <h4 class="text-2xl font-semibold text-emerald-300 mt-4">3. 创建包含 OpenAI API 和 Stripe API 密钥的 .env 文件</h4>
+                    <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono text-sm mt-2">
+                        <pre><code>OPENAI_API_KEY=你的OpenAI密钥
+STRIPE_SECRET_KEY=你的Stripe测试密钥</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Environment Setup -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="text-3xl font-semibold text-emerald-300 text-center">环境设置</h3>
+                <p class="text-lg mb-4 text-left">首先，我们将安装必要的依赖项，然后导入库并编写一些稍后会用到的实用函数。</p>
+                <h4 class="text-2xl font-semibold text-emerald-200 mt-4 mb-2">安装依赖</h4>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-bash">
+%pip install python-dotenv --quiet
+%pip install openai-agents --quiet
+%pip install stripe --quiet
+%pip install typing_extensions --quiet
+                    </code></pre>
+                </div>
+                <h4 class="text-2xl font-semibold text-emerald-200 mt-6 mb-2">导入库与配置</h4>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-keyword">import</span> os
+<span class="python-keyword">import</span> logging
+<span class="python-keyword">import</span> json
+<span class="python-keyword">from</span> dotenv <span class="python-keyword">import</span> load_dotenv
+<span class="python-keyword">from</span> agents <span class="python-keyword">import</span> Agent, Runner, function_tool
+<span class="python-keyword">import</span> stripe
+<span class="python-keyword">from</span> typing_extensions <span class="python-keyword">import</span> TypedDict, Any
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+<span class="python-variable">logger</span> = logging.getLogger(__name__)
+
+stripe.api_key = os.getenv(<span class="python-string">"STRIPE_SECRET_KEY"</span>)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Define Function Tools -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="text-3xl font-semibold text-emerald-300 text-center">定义函数工具 (1/2)</h3>
+                <p class="text-lg mb-4 text-left">本节定义了几个辅助函数工具，用于支持争议处理工作流。</p>
+                <ul class="list-disc text-lg mb-4 text-left space-y-1">
+                    <li>`get_order`、`get_phone_logs` 和 `get_emails` 通过基于提供的标识符返回订单详情和邮件/电话记录来模拟外部数据查找。</li>
+                    <li>`retrieve_payment_intent` 与 Stripe API 交互以获取支付意图详情。</li>
+                    <li>`close_dispute` 使用提供的争议 ID 自动关闭 Stripe 争议，确保争议得到妥善解决和记录。</li>
+                </ul>
+                 <p class="text-lg mb-4 text-left">以下是模拟数据查找的工具：</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-decorator">@function_tool</span>
+<span class="python-keyword">def</span> <span class="python-function">get_phone_logs</span>(<span class="python-variable">phone_number</span>: str) -> list:
+    <span class="python-variable">phone_logs</span> = [
+        {
+            <span class="python-string">"phone_number"</span>: <span class="python-string">"+15551234567"</span>,
+            <span class="python-string">"timestamp"</span>: <span class="python-string">"2023-03-14 15:24:00"</span>,
+            <span class="python-string">"duration_minutes"</span>: <span class="python-number">5</span>,
+            <span class="python-string">"notes"</span>: <span class="python-string">"Asked about status of order #1121"</span>,
+            <span class="python-string">"order_id"</span>: <span class="python-number">1121</span>
+        },
+        {
+            <span class="python-string">"phone_number"</span>: <span class="python-string">"+15551234567"</span>,
+            <span class="python-string">"timestamp"</span>: <span class="python-string">"2023-02-28 10:10:00"</span>,
+            <span class="python-string">"duration_minutes"</span>: <span class="python-number">7</span>,
+            <span class="python-string">"notes"</span>: <span class="python-string">"Requested refund for order #1121, I told him we were unable to refund the order because it was final sale"</span>,
+            <span class="python-string">"order_id"</span>: <span class="python-number">1121</span>
+        },
+        {
+            <span class="python-string">"phone_number"</span>: <span class="python-string">"+15559876543"</span>,
+            <span class="python-string">"timestamp"</span>: <span class="python-string">"2023-01-05 09:00:00"</span>,
+            <span class="python-string">"duration_minutes"</span>: <span class="python-number">2</span>,
+            <span class="python-string">"notes"</span>: <span class="python-string">"General inquiry; no specific order mentioned"</span>,
+            <span class="python-string">"order_id"</span>: <span class="python-keyword">None</span>
+        },
+    ]
+    <span class="python-keyword">return</span> [log <span class="python-keyword">for</span> log <span class="python-keyword">in</span> phone_logs <span class="python-keyword">if</span> log[<span class="python-string">"phone_number"</span>] == phone_number]
+
+
+<span class="python-decorator">@function_tool</span>
+<span class="python-keyword">def</span> <span class="python-function">get_order</span>(<span class="python-variable">order_id</span>: int) -> dict:
+    <span class="python-variable">orders</span> = [
+        {
+            <span class="python-string">"order_id"</span>: <span class="python-number">1234</span>,
+            <span class="python-string">"fulfillment_details"</span>: <span class="python-string">"not_shipped"</span>
+        },
+        {
+            <span class="python-string">"order_id"</span>: <span class="python-number">9101</span>,
+            <span class="python-string">"fulfillment_details"</span>: <span class="python-string">"shipped"</span>,
+            <span class="python-string">"tracking_info"</span>: {
+                <span class="python-string">"carrier"</span>: <span class="python-string">"FedEx"</span>,
+                <span class="python-string">"tracking_number"</span>: <span class="python-string">"123456789012"</span>
+            },
+            <span class="python-string">"delivery_status"</span>: <span class="python-string">"out for delivery"</span>
+        },
+        {
+            <span class="python-string">"order_id"</span>: <span class="python-number">1121</span>,
+            <span class="python-string">"fulfillment_details"</span>: <span class="python-string">"delivered"</span>,
+            <span class="python-string">"customer_id"</span>: <span class="python-string">"cus_PZ1234567890"</span>,
+            <span class="python-string">"customer_phone"</span>: <span class="python-string">"+15551234567"</span>,
+            <span class="python-string">"order_date"</span>: <span class="python-string">"2023-01-01"</span>,
+            <span class="python-string">"customer_email"</span>: <span class="python-string">"customer1@example.com"</span>,
+            <span class="python-string">"tracking_info"</span>: {
+                <span class="python-string">"carrier"</span>: <span class="python-string">"UPS"</span>,
+                <span class="python-string">"tracking_number"</span>: <span class="python-string">"1Z999AA10123456784"</span>,
+                <span class="python-string">"delivery_status"</span>: <span class="python-string">"delivered"</span>
+            },
+            <span class="python-string">"shipping_address"</span>: {
+                <span class="python-string">"zip"</span>: <span class="python-string">"10001"</span>
+            },
+            <span class="python-string">"tos_acceptance"</span>: {
+                <span class="python-string">"date"</span>: <span class="python-string">"2023-01-01"</span>,
+                <span class="python-string">"ip"</span>: <span class="python-string">"192.168.1.1"</span>
+            }
+        }
+    ]
+    <span class="python-keyword">for</span> order <span class="python-keyword">in</span> orders:
+        <span class="python-keyword">if</span> order[<span class="python-string">"order_id"</span>] == order_id:
+            <span class="python-keyword">return</span> order
+    <span class="python-keyword">return</span> {<span class="python-string">"error"</span>: <span class="python-string">"No order found"</span>}
+
+
+<span class="python-decorator">@function_tool</span>
+<span class="python-keyword">def</span> <span class="python-function">get_emails</span>(<span class="python-variable">email</span>: str) -> list:
+    <span class="python-variable">emails</span> = [
+        {
+            <span class="python-string">"email"</span>: <span class="python-string">"customer1@example.com"</span>,
+            <span class="python-string">"subject"</span>: <span class="python-string">"Order #1121"</span>,
+            <span class="python-string">"body"</span>: <span class="python-string">"Hey, I know you don't accept refunds but the sneakers don't fit and I'd like a refund"</span>
+        },
+        {
+            <span class="python-string">"email"</span>: <span class="python-string">"customer2@example.com"</span>,
+            <span class="python-string">"subject"</span>: <span class="python-string">"Inquiry about product availability"</span>,
+            <span class="python-string">"body"</span>: <span class="python-string">"Hello, I wanted to check if the new model of the smartphone is available in stock."</span>
+        },
+        {
+            <span class="python-string">"email"</span>: <span class="python-string">"customer3@example.com"</span>,
+            <span class="python-string">"subject"</span>: <span class="python-string">"Feedback on recent purchase"</span>,
+            <span class="python-string">"body"</span>: <span class="python-string">"Hi, I recently purchased a laptop from your store and I am very satisfied with the product. Keep up the good work!"</span>
+        }
+    ]
+    <span class="python-keyword">return</span> [email_data <span class="python-keyword">for</span> email_data <span class="python-keyword">in</span> emails <span class="python-keyword">if</span> email_data[<span class="python-string">"email"</span>] == email]
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Define Stripe API Function Tools -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="text-3xl font-semibold text-emerald-300 text-center">定义函数工具 (2/2)</h3>
+                <p class="text-lg mb-4 text-left">以下是与 Stripe API 交互的工具：</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-decorator">@function_tool</span>
+<span class="python-keyword">async def</span> <span class="python-function">retrieve_payment_intent</span>(<span class="python-variable">payment_intent_id</span>: str) -> dict:
+    <span class="python-keyword">try</span>:
+        <span class="python-keyword">return</span> stripe.PaymentIntent.retrieve(payment_intent_id)
+    <span class="python-keyword">except</span> stripe.error.StripeError <span class="python-keyword">as</span> e:
+        logger.error(<span class="python-string">f"Stripe error occurred while retrieving payment intent: {e}"</span>)
+        <span class="python-keyword">return</span> {}
+
+<span class="python-decorator">@function_tool</span>
+<span class="python-keyword">async def</span> <span class="python-function">close_dispute</span>(<span class="python-variable">dispute_id</span>: str) -> dict:
+    <span class="python-keyword">try</span>:
+        <span class="python-keyword">return</span> stripe.Dispute.close(dispute_id)
+    <span class="python-keyword">except</span> stripe.error.StripeError <span class="python-keyword">as</span> e:
+        logger.error(<span class="python-string">f"Stripe error occurred while closing dispute: {e}"</span>)
+        <span class="python-keyword">return</span> {}
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Define the Agents -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">定义 Agents (1/2)</h2>
+                <div class="text-lg space-y-3 text-left">
+                    <p>我们将定义三个核心 Agent 来协同处理争议：</p>
+                    <ul class="list-disc space-y-2">
+                        <li><strong>调查 Agent (Investigator Agent)：</strong> 负责通过收集所有相关证据来调查争议并提供报告。</li>
+                        <li><strong>受理 Agent (Acceptance Agent)：</strong> 通过自动关闭被确定为有效的争议并为决定提供简要解释来处理这些争议。</li>
+                        <li><strong>分诊 Agent (Triage Agent)：</strong> 作为决策者，通过从支付意图的元数据中提取订单 ID，检索详细的订单信息，然后决定是将争议升级给调查 Agent 还是将其传递给受理 Agent。</li>
+                    </ul>
+                    <p>这些 Agent 共同构成了一个模块化的工作流，通过将特定任务委派给专门的 Agent 来自动化和简化争议解决过程。</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 8: Agent Definitions Code -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                 <h2 class="text-4xl font-bold text-emerald-400 text-center">定义 Agents (2/2) - 代码</h2>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-variable">investigator_agent</span> = Agent(
+    name=<span class="python-string">"Dispute Intake Agent"</span>,
+    instructions=(
+        <span class="python-string">"作为争议调查员，请在最终输出中汇编以下详细信息：\\n\\n"</span>
+        <span class="python-string">"争议详情：\\n"</span>
+        <span class="python-string">"- 争议 ID\\n"</span>
+        <span class="python-string">"- 金额\\n"</span>
+        <span class="python-string">"- 争议原因\\n"</span>
+        <span class="python-string">"- 卡品牌\\n\\n"</span>
+        <span class="python-string">"支付与订单详情：\\n"</span>
+        <span class="python-string">"- 订单的履行状态\\n"</span>
+        <span class="python-string">"- 运输承运商和追踪号码\\n"</span>
+        <span class="python-string">"- TOS 接受确认\\n\\n"</span>
+        <span class="python-string">"邮件和电话记录：\\n"</span>
+        <span class="python-string">"- 任何相关的邮件线索（包括完整的正文文本）\\n"</span>
+        <span class="python-string">"- 任何相关的电话日志\\n"</span>
+    ),
+    model=<span class="python-string">"o3-mini"</span>,
+    tools=[get_emails, get_phone_logs]
+)
+
+<span class="python-variable">accept_dispute_agent</span> = Agent(
+    name=<span class="python-string">"Accept Dispute Agent"</span>,
+    instructions=(
+        <span class="python-string">"您是负责接受争议的 Agent。请执行以下操作：\\n"</span>
+        <span class="python-string">"1. 使用提供的争议 ID 关闭争议。\\n"</span>
+        <span class="python-string">"2. 简要解释为什么接受争议。\\n"</span>
+        <span class="python-string">"3. 参考从数据库中检索到的任何相关订单详情（例如，未履行的订单等）。\\n\\n"</span>
+        <span class="python-string">"然后，按此确切格式生成最终输出：\\n\\n"</span>
+        <span class="python-string">"争议详情：\\n"</span>
+        <span class="python-string">"- 争议 ID\\n"</span>
+        <span class="python-string">"- 金额\\n"</span>
+        <span class="python-string">"- 争议原因\\n\\n"</span>
+        <span class="python-string">"订单详情：\\n"</span>
+        <span class="python-string">"- 订单的履行状态\\n\\n"</span>
+        <span class="python-string">"Reasoning for closing the dispute\\n"</span>
+    ),
+    model=<span class="python-string">"gpt-4o"</span>,
+    tools=[close_dispute]
+)
+
+<span class="python-variable">triage_agent</span> = Agent(
+    name=<span class="python-string">"Triage Agent"</span>,
+    instructions=(
+        <span class="python-string">"请执行以下操作：\\n"</span>
+        <span class="python-string">"1. 从支付意图的元数据中找到订单 ID。\\n"</span>
+        <span class="python-string">"2. 检索有关订单的详细信息（例如，发货状态）。\\n"</span>
+        <span class="python-string">"3. 如果订单已发货，将此争议升级给调查 Agent。\\n"</span>
+        <span class="python-string">"4. 如果订单未发货，将此争议交由受理 Agent 处理。\\n"</span>
+    ),
+    model=<span class="python-string">"gpt-4o"</span>,
+    tools=[retrieve_payment_intent, get_order],
+    handoffs=[accept_dispute_agent, investigator_agent],
+)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Retrieve Dispute and Initiate Workflow -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="text-3xl font-semibold text-emerald-300 text-center">检索争议并启动 Agent 工作流</h3>
+                <p class="text-lg mb-4 text-left">此函数使用提供的 `payment_intent_id` 从 Stripe 检索争议详情，并通过将检索到的争议信息传递给指定的 `triage_agent` 来启动争议处理工作流。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-keyword">async def</span> <span class="python-function">process_dispute</span>(<span class="python-variable">payment_intent_id</span>, <span class="python-variable">triage_agent</span>):
+    <span class="python-variable">disputes_list</span> = stripe.Dispute.list(payment_intent=payment_intent_id)
+    <span class="python-keyword">if not</span> disputes_list.data:
+        logger.warning(<span class="python-string">"No dispute data found for PaymentIntent: %s"</span>, payment_intent_id)
+        <span class="python-keyword">return</span> <span class="python-keyword">None</span>, <span class="python-keyword">None</span>
+    
+    <span class="python-variable">dispute_data</span> = disputes_list.data[<span class="python-number">0</span>]
+    
+    <span class="python-variable">relevant_data</span> = {
+        <span class="python-string">"dispute_id"</span>: dispute_data.get(<span class="python-string">"id"</span>),
+        <span class="python-string">"amount"</span>: dispute_data.get(<span class="python-string">"amount"</span>),
+        <span class="python-string">"due_by"</span>: dispute_data.get(<span class="python-string">"evidence_details"</span>, {}).get(<span class="python-string">"due_by"</span>),
+        <span class="python-string">"payment_intent"</span>: dispute_data.get(<span class="python-string">"payment_intent"</span>),
+        <span class="python-string">"reason"</span>: dispute_data.get(<span class="python-string">"reason"</span>),
+        <span class="python-string">"status"</span>: dispute_data.get(<span class="python-string">"status"</span>),
+        <span class="python-string">"card_brand"</span>: dispute_data.get(<span class="python-string">"payment_method_details"</span>, {}).get(<span class="python-string">"card"</span>, {}).get(<span class="python-string">"brand"</span>)
+    }
+    
+    <span class="python-variable">event_str</span> = json.dumps(relevant_data)
+    <span class="python-variable">result</span> = <span class="python-keyword">await</span> Runner.run(triage_agent, input=event_str)
+    logger.info(<span class="python-string">"WORKFLOW RESULT: %s"</span>, result.final_output)
+    
+    <span class="python-keyword">return</span> relevant_data, result.final_output
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 10: Scenario 1: Company Mistake -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">场景 1：公司失误（未收到产品）</h2>
+                <p class="text-lg mb-4 text-left">此场景代表公司明显犯错的情况——例如，未能履行或运送订单。在这种情况下，受理争议 Agent 应当被调用来自动接受争议。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-variable">payment_company_mistake</span> = stripe.PaymentIntent.create(
+  amount=<span class="python-number">2000</span>,
+  currency=<span class="python-string">"usd"</span>,
+  payment_method = <span class="python-string">"pm_card_createDisputeProductNotReceived"</span>,
+  confirm=<span class="python-keyword">True</span>,
+  metadata={<span class="python-string">"order_id"</span>: <span class="python-string">"1234"</span>},
+  off_session=<span class="python-keyword">True</span>,
+  automatic_payment_methods={<span class="python-string">"enabled"</span>: <span class="python-keyword">True</span>},
+)
+<span class="python-comment"># relevant_data_s1, triage_result_s1 = await process_dispute(payment_company_mistake.id, triage_agent)</span>
+                    </code></pre>
+                </div>
+                 <p class="text-sm text-gray-500 mt-2 text-left italic">（注意：实际运行此代码需要有效的 Stripe 测试环境和可触发争议的支付方式。此处仅为演示流程。）</p>
+            </div>
+        </div>
+
+        <!-- Slide 11: Scenario 2: Customer Dispute (Final Sale) -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">场景 2：客户争议（最终销售）</h2>
+                <p class="text-lg mb-4 text-left">此场景描述了客户故意对交易提出争议的情况，尽管他们收到了正确的产品并且完全了解购买明确标记为“最终销售”。此类争议通常需要调查 Agent 进一步调查以收集证据。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-variable">payment_final_sale_dispute</span> = stripe.PaymentIntent.create(
+  amount=<span class="python-number">2000</span>,
+  currency=<span class="python-string">"usd"</span>,
+  payment_method = <span class="python-string">"pm_card_createDispute"</span>,
+  confirm=<span class="python-keyword">True</span>,
+  metadata={<span class="python-string">"order_id"</span>: <span class="python-string">"1121"</span>},
+  off_session=<span class="python-keyword">True</span>,
+  automatic_payment_methods={<span class="python-string">"enabled"</span>: <span class="python-keyword">True</span>},
+)
+<span class="python-comment"># relevant_data_s2, triage_result_s2 = await process_dispute(payment_final_sale_dispute.id, triage_agent)</span>
+                    </code></pre>
+                </div>
+                <p class="text-sm text-gray-500 mt-2 text-left italic">（注意：同上，实际运行需要配置好的 Stripe 测试环境。）</p>
+            </div>
+        </div>
+        
+        <!-- Slide 12: Conclusion -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="text-4xl font-bold text-emerald-400 text-center">结论</h2>
+                <div class="text-lg space-y-3 text-left">
+                    <p>在本 Jupyter Notebook 中，我们探讨了 **OpenAI Agents SDK** 的功能，演示了如何使用简单、Python 优先的方法高效创建基于 Agent 的 AI 应用。具体来说，我们展示了以下 SDK 功能：</p>
+                    <ul class="list-disc">
+                        <li><strong>Agent 循环 (Agent Loop)：</strong> 管理工具调用，将结果传达给 LLM，并循环直到完成。</li>
+                        <li><strong>交接 (Handoffs)：</strong> 实现多个专业 Agent 之间的协调和任务委派。</li>
+                        <li><strong>函数工具 (Function Tools)：</strong> 将 Python 函数转换为工具，并自动生成模式和进行验证。</li>
+                    </ul>
+                    <p>此外，SDK 还提供内置的 **追踪 (Tracing)** 功能，可通过 OpenAI 控制面板访问。追踪可帮助您在开发和生产阶段可视化、调试和监控您的 Agent 工作流。它还与 OpenAI 的评估、微调和蒸馏工具平滑集成。</p>
+                    <p>虽然我们没有在本 Notebook 中直接介绍，但强烈建议在生产应用中实施 **护栏 (Guardrails)** 以验证输入并主动检测错误。</p>
+                    <p>总的来说，本 Notebook 为进一步探索奠定了清晰的基础，强调了 OpenAI Agents SDK 如何促进直观有效的 Agent 驱动工作流。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: Final Call to Action -->
+        <div class="slide p-8 flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-emerald-900 text-center">
+            <div class="w-full max-w-3xl">
+                <h2 class="text-4xl font-bold mb-8 text-emerald-300">开始使用 Agents SDK！</h2>
+                <p class="text-xl text-gray-200 leading-relaxed">
+                    OpenAI Agents SDK 为构建复杂的、基于 Agent 的应用程序提供了强大的工具。
+                </p>
+                <p class="text-lg text-gray-300 mt-6 leading-relaxed">
+                    访问 OpenAI 文档，探索更多可能性，并开始构建您的下一个智能 Agent 应用。
+                </p>
+            </div>
+        </div>
+
+
+        <!-- Navigation Buttons -->
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 flex space-x-4 z-20">
+            <button id="prevBtn" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled aria-label="上一页">
+                ← 上一页
+            </button>
+            <button id="nextBtn" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105" aria-label="下一页">
+                下一页 →
+            </button>
+        </div>
+        <div class="fixed bottom-1 left-1/2 -translate-x-1/2 text-xs text-gray-500 z-20">
+            <span id="slideCounter"></span>
+        </div>
+
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const slideCounter = document.getElementById('slideCounter');
+        let currentSlide = 0;
+
+        const os = { getenv: (key) => `YOUR_${key}_HERE_MOCK` };
+        const logging = { basicConfig: () => {}, getLogger: () => ({ info: console.log, warning: console.warn, error: console.error }) };
+        const json = JSON;
+        const { load_dotenv } = (() => ({ load_dotenv: () => {} }))(); 
+        const agents = (() => { 
+            const Agent = function(config) { this.config = config; };
+            const Runner = { run: async (agent, options) => {
+                let finalOutput = `模拟 ${agent.config.name} 处理完成。`;
+                if (agent.config.name === "Triage Agent") {
+                     try {
+                        const disputeData = JSON.parse(options.input);
+                        const mockPaymentIntent = await stripe.PaymentIntent.retrieve(disputeData.payment_intent);
+                        const orderId = mockPaymentIntent.metadata.order_id;
+                        const orderDetails = mock_get_order(parseInt(orderId));
+                        
+                        if (orderDetails && typeof orderDetails !== 'string' && orderDetails.fulfillment_details === "not_shipped") {
+                             finalOutput = `分诊结果：订单 ${orderId} (来自支付意图 ${disputeData.payment_intent}) 未发货，将交由受理Agent处理。`;
+                        } else if (orderDetails && typeof orderDetails !== 'string') {
+                            finalOutput = `分诊结果：订单 ${orderId} (来自支付意图 ${disputeData.payment_intent}) 已发货/已送达，将交由调查Agent处理。`;
+                        } else {
+                            finalOutput = `分诊结果：订单 ${orderId} (来自支付意图 ${disputeData.payment_intent}) 未找到或数据错误，需人工检查。`;
+                        }
+                    } catch (e) {
+                         finalOutput = `分诊Agent处理时发生模拟错误： ${e.message}`;
+                    }
+                } else if (agent.config.name === "Accept Dispute Agent") {
+                    finalOutput = `受理Agent：争议已关闭，原因为订单未履行 (模拟)。`;
+                } else if (agent.config.name === "Dispute Intake Agent") {
+                     finalOutput = `调查Agent (Dispute Intake Agent)：已收集争议ID、金额、支付详情、邮件和电话记录等证据 (模拟)。`;
+                }
+                return { final_output: finalOutput };
+            }};
+            const function_tool = (fn) => fn; 
+            return { Agent, Runner, function_tool };
+        })();
+        const stripe = { 
+            api_key: null,
+            PaymentIntent: {
+                _mock_intents: {},
+                create: async (params) => {
+                    const pi_id = `pi_mock_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+                    stripe.PaymentIntent._mock_intents[pi_id] = { id: pi_id, metadata: params.metadata || {}, ...params };
+                    return stripe.PaymentIntent._mock_intents[pi_id];
+                },
+                retrieve: async (id) => {
+                     return stripe.PaymentIntent._mock_intents[id] || { id: id, metadata: { order_id: `unknown_order_for_${id}` } };
+                }
+            },
+            Dispute: {
+                list: async (params) => {
+                    return { data: [{ id: `dp_mock_${Date.now()}`, amount: 2000, reason: "product_not_received", payment_intent: params.payment_intent, evidence_details: {due_by: Date.now() + 86400000}, status: "needs_response", payment_method_details: {card: {brand: "visa"}} }] };
+                },
+                close: async (id) => ({ id: id, status: "closed", livemode: false })
+            },
+            error: { StripeError: class StripeError extends Error {} }
+        };
+        const { TypedDict, Any } = (() => ({ TypedDict: Object, Any: Object }))(); 
+
+        const mock_get_order_data_ppt = [
+            { "order_id": 1234, "fulfillment_details": "not_shipped" },
+            { "order_id": 9101, "fulfillment_details": "shipped", tracking_info: {}, delivery_status: "out for delivery" },
+            { "order_id": 1121, "fulfillment_details": "delivered", customer_id: "cus_PZ1234567890", customer_phone: "+15551234567", order_date: "2023-01-01", customer_email: "customer1@example.com", tracking_info: {carrier: "UPS", tracking_number: "1Z999AA10123456784", delivery_status: "delivered"}, shipping_address: {zip: "10001"}, tos_acceptance: {date: "2023-01-01", ip: "192.168.1.1"}}
+        ];
+        const mock_get_order = (order_id) => mock_get_order_data_ppt.find(o => o.order_id === order_id) || {error: "No order found"};
+
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.remove('hidden');
+                    setTimeout(() => slide.classList.add('active'), 10);
+                } else {
+                    if (!slide.classList.contains('active')) {
+                         slide.classList.add('hidden');
+                    }
+                }
+            });
+            updateButtons();
+            updateSlideCounter();
+        }
+
+        function updateButtons() {
+            prevBtn.disabled = currentSlide === 0;
+            nextBtn.disabled = currentSlide === slides.length - 1;
+        }
+
+        function updateSlideCounter() {
+            slideCounter.textContent = `第 ${currentSlide + 1} 页 / 共 ${slides.length} 页`;
+        }
+
+        function nextSlide() {
+            if (currentSlide < slides.length - 1) {
+                slides[currentSlide].classList.remove('active');
+                setTimeout(() => {
+                    slides[currentSlide].classList.add('hidden');
+                    currentSlide++;
+                    showSlide(currentSlide);
+                }, 350);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                slides[currentSlide].classList.remove('active');
+                setTimeout(() => {
+                    slides[currentSlide].classList.add('hidden');
+                    currentSlide--;
+                    showSlide(currentSlide);
+                }, 350);
+            }
+        }
+
+        prevBtn.addEventListener('click', prevSlide);
+        nextBtn.addEventListener('click', nextSlide);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        showSlide(currentSlide);
+    </script>
+</body>
+</html>
