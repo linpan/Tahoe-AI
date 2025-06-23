@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLLM 并行策略图解</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .parallel-section {
+            margin: 40px 0;
+            padding: 20px;
+            border-radius: 15px;
+            background: #f8f9fa;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .gpu-grid {
+            display: grid;
+            gap: 15px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+
+        .tensor-parallel-grid {
+            grid-template-columns: repeat(4, 1fr);
+            max-width: 800px;
+        }
+
+        .pipeline-parallel-grid {
+            grid-template-columns: repeat(2, 1fr);
+            max-width: 400px;
+        }
+
+        .gpu-card {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .gpu-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .layer-card {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(250, 112, 154, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .layer-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        .description {
+            background: #e8f4f8;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 5px solid #667eea;
+        }
+
+        .combined-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 40px 0;
+        }
+
+        .combined-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stage {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .stage h4 {
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+        }
+
+        .mini-gpu {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            padding: 5px;
+            margin: 3px;
+            font-size: 0.8em;
+            display: inline-block;
+            min-width: 40px;
+        }
+
+        .flow-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            color: #ffffff;
+        }
+
+        .summary {
+            background: #f1f8ff;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 30px 0;
+            border: 2px solid #667eea;
+        }
+
+        .summary h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .comparison-table tr:hover {
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VLLM 并行策略：张量并行 vs 流水线并行</h1>
+
+        <!-- 张量并行部分 -->
+        <div class="parallel-section">
+            <div class="section-title">🔧 张量并行 (Tensor Parallel) - TP=8</div>
+
+            <div class="description">
+                <strong>核心思想：</strong>将单个神经网络层的计算在多个GPU上水平分割，每个GPU处理部分权重矩阵。
+            </div>
+
+            <div class="gpu-grid tensor-parallel-grid">
+                <div class="gpu-card">GPU 0<br><small>权重分片 1/8</small></div>
+                <div class="gpu-card">GPU 1<br><small>权重分片 2/8</small></div>
+                <div class="gpu-card">GPU 2<br><small>权重分片 3/8</small></div>
+                <div class="gpu-card">GPU 3<br><small>权重分片 4/8</small></div>
+                <div class="gpu-card">GPU 4<br><small>权重分片 5/8</small></div>
+                <div class="gpu-card">GPU 5<br><small>权重分片 6/8</small></div>
+                <div class="gpu-card">GPU 6<br><small>权重分片 7/8</small></div>
+                <div class="gpu-card">GPU 7<br><small>权重分片 8/8</small></div>
+            </div>
+
+            <div class="arrow">⬇️ 同一层并行计算 ⬇️</div>
+
+            <div style="text-align: center; padding: 20px; background: #e8f4f8; border-radius: 10px;">
+                <strong>All-Reduce 通信聚合结果</strong>
+            </div>
+        </div>
+
+        <!-- 流水线并行部分 -->
+        <div class="parallel-section">
+            <div class="section-title">🔄 流水线并行 (Pipeline Parallel) - PP=2 详解</div>
+
+            <div class="description">
+                <strong>核心思想：</strong>将神经网络的不同层分配到不同的GPU组上，形成计算流水线，类似工厂生产线。
+            </div>
+
+            <!-- 模型层分割示意 -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                <h4 style="text-align: center; color: #2c3e50;">🧠 神经网络层分割示意（以32层Transformer为例）</h4>
+                <div style="display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap;">
+                    <div style="background: #4facfe; color: white; padding: 15px; border-radius: 10px; text-align: center; flex: 1; min-width: 200px;">
+                        <strong>Stage 0 (GPU组0)</strong><br>
+                        <div style="font-size: 0.9em; margin-top: 10px;">
+                            • Layer 1-16<br>
+                            • Embedding层<br>
+                            • 前16个Transformer块<br>
+                            • Self-Attention + FFN
+                        </div>
+                    </div>
+                    <div style="font-size: 2em; color: #667eea;">➡️</div>
+                    <div style="background: #fa709a; color: white; padding: 15px; border-radius: 10px; text-align: center; flex: 1; min-width: 200px;">
+                        <strong>Stage 1 (GPU组1)</strong><br>
+                        <div style="font-size: 0.9em; margin-top: 10px;">
+                            • Layer 17-32<br>
+                            • 后16个Transformer块<br>
+                            • LayerNorm<br>
+                            • LM Head输出层
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 流水线时序图 -->
+            <div style="background: #e8f4f8; padding: 25px; border-radius: 15px; margin: 20px 0;">
+                <h4 style="text-align: center; color: #2c3e50;">⏱️ 流水线时序执行图</h4>
+                <div style="font-family: monospace; background: white; padding: 20px; border-radius: 10px; overflow-x: auto;">
+                    <div style="display: grid; grid-template-columns: 80px repeat(8, 1fr); gap: 5px; align-items: center;">
+                        <!-- 表头 -->
+                        <div style="font-weight: bold;">时间步</div>
+                        <div style="text-align: center; font-weight: bold;">T1</div>
+                        <div style="text-align: center; font-weight: bold;">T2</div>
+                        <div style="text-align: center; font-weight: bold;">T3</div>
+                        <div style="text-align: center; font-weight: bold;">T4</div>
+                        <div style="text-align: center; font-weight: bold;">T5</div>
+                        <div style="text-align: center; font-weight: bold;">T6</div>
+                        <div style="text-align: center; font-weight: bold;">T7</div>
+                        <div style="text-align: center; font-weight: bold;">T8</div>
+
+                        <!-- Stage 0 -->
+                        <div style="font-weight: bold; color: #4facfe;">Stage 0</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch1</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch2</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch3</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch4</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch5</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch6</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch7</div>
+                        <div style="background: #4facfe; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch8</div>
+
+                        <!-- Stage 1 -->
+                        <div style="font-weight: bold; color: #fa709a;">Stage 1</div>
+                        <div style="background: #f0f0f0; text-align: center; padding: 8px; border-radius: 5px; color: #999;">等待</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch1</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch2</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch3</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch4</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch5</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch6</div>
+                        <div style="background: #fa709a; color: white; text-align: center; padding: 8px; border-radius: 5px;">Batch7</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; font-size: 0.9em; color: #666;">
+                    <strong>说明：</strong>Stage 0处理完Batch1后，立即传递给Stage 1，同时开始处理Batch2，实现流水线并行。
+                </div>
+            </div>
+
+            <!-- 详细工作流程 -->
+            <div style="background: #fff3cd; padding: 20px; border-radius: 15px; margin: 20px 0;">
+                <h4 style="color: #856404; margin-top: 0;">🔄 详细工作流程</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                    <div style="background: white; padding: 15px; border-radius: 10px; border-left: 4px solid #4facfe;">
+                        <strong>步骤1：初始化</strong><br>
+                        • Stage 0 加载 Layer 1-16<br>
+                        • Stage 1 加载 Layer 17-32<br>
+                        • 每个Stage占用不同GPU
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; border-left: 4px solid #fa709a;">
+                        <strong>步骤2：开始计算</strong><br>
+                        • 输入进入Stage 0<br>
+                        • Stage 0处理前16层<br>
+                        • Stage 1等待中间结果
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; border-left: 4px solid #28a745;">
+                        <strong>步骤3：传递激活</strong><br>
+                        • Stage 0计算完成<br>
+                        • 激活值传递给Stage 1<br>
+                        • Stage 0开始下一批数据
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; border-left: 4px solid #17a2b8;">
+                        <strong>步骤4：并行处理</strong><br>
+                        • Stage 1处理后16层<br>
+                        • Stage 0同时处理新批次<br>
+                        • 实现真正的流水线
+                    </div>
+                </div>
+            </div>
+
+            <!-- 内存和通信分析 -->
+            <div style="background: #f1f8ff; padding: 20px; border-radius: 15px; margin: 20px 0; border: 2px solid #667eea;">
+                <h4 style="color: #2c3e50; margin-top: 0;">💾 内存和通信分析</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h5 style="color: #4facfe;">📊 内存分布</h5>
+                        <ul style="line-height: 1.6;">
+                            <li><strong>Stage 0：</strong>只需存储前16层参数</li>
+                            <li><strong>Stage 1：</strong>只需存储后16层参数</li>
+                            <li><strong>优势：</strong>内存需求减半</li>
+                            <li><strong>激活值：</strong>需要存储中间激活值</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 style="color: #fa709a;">🌐 通信开销</h5>
+                        <ul style="line-height: 1.6;">
+                            <li><strong>前向传播：</strong>Stage间传递激活值</li>
+                            <li><strong>反向传播：</strong>Stage间传递梯度</li>
+                            <li><strong>通信量：</strong>相对较小（只有激活值）</li>
+                            <li><strong>延迟：</strong>存在Pipeline bubble</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pipeline Bubble 问题 -->
+            <div style="background: #ffe6e6; padding: 20px; border-radius: 15px; margin: 20px 0; border-left: 4px solid #dc3545;">
+                <h4 style="color: #721c24; margin-top: 0;">⚠️ Pipeline Bubble 问题</h4>
+                <div style="background: white; padding: 15px; border-radius: 10px; font-family: monospace; overflow-x: auto;">
+                    <div style="margin-bottom: 10px;"><strong>理想情况 vs 实际情况：</strong></div>
+                    <div style="color: #28a745;">✅ 理想：Stage 0 → Stage 1 → Stage 0 → Stage 1 ...</div>
+                    <div style="color: #dc3545;">❌ 实际：Stage 0 → 等待 → Stage 1 → 等待 → Stage 0 ...</div>
+                </div>
+                <p style="margin-top: 15px; font-size: 0.95em;">
+                    <strong>解决方案：</strong>
+                    • 使用Micro-batching技术<br>
+                    • 增加Pipeline深度<br>
+                    • 优化批次大小
+                </p>
+            </div>
+        </div>
+
+        <!-- 组合策略部分 -->
+        <div class="combined-section">
+            <div class="section-title" style="color: white;">🚀 组合策略：TP=8 + PP=2 (总共16个GPU)</div>
+
+            <div class="combined-grid">
+                <div class="stage">
+                    <h4>Pipeline Stage 0</h4>
+                    <div class="mini-gpu">GPU 0</div>
+                    <div class="mini-gpu">GPU 1</div>
+                    <div class="mini-gpu">GPU 2</div>
+                    <div class="mini-gpu">GPU 3</div>
+                    <div class="mini-gpu">GPU 4</div>
+                    <div class="mini-gpu">GPU 5</div>
+                    <div class="mini-gpu">GPU 6</div>
+                    <div class="mini-gpu">GPU 7</div>
+                    <div style="font-size: 0.9em; margin-top: 10px;">前半部分层<br>8路张量并行</div>
+                </div>
+
+                <div class="flow-arrow">➡️</div>
+
+                <div class="stage">
+                    <h4>Pipeline Stage 1</h4>
+                    <div class="mini-gpu">GPU 8</div>
+                    <div class="mini-gpu">GPU 9</div>
+                    <div class="mini-gpu">GPU 10</div>
+                    <div class="mini-gpu">GPU 11</div>
+                    <div class="mini-gpu">GPU 12</div>
+                    <div class="mini-gpu">GPU 13</div>
+                    <div class="mini-gpu">GPU 14</div>
+                    <div class="mini-gpu">GPU 15</div>
+                    <div style="font-size: 0.9em; margin-top: 10px;">后半部分层<br>8路张量并行</div>
+                </div>
+
+                <div class="flow-arrow">📤</div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; font-size: 1.1em;">
+                <strong>数据流：输入 → Stage 0 (8个GPU并行) → Stage 1 (8个GPU并行) → 输出</strong>
+            </div>
+        </div>
+
+        <!-- 流水线并行具体例子 -->
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 15px; margin: 40px 0;">
+            <h3 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">🎯 流水线并行具体例子：GPT模型推理</h3>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+                <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);">
+                    <h4 style="color: #4facfe; margin-top: 0;">🔵 传统单GPU方式</h4>
+                    <div style="font-family: monospace; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+<pre style="margin: 0; font-size: 0.9em;">GPU 0 处理全部32层：
+Time 1: [Input] → L1→L2→...→L32 → [Output1]
+Time 2: [Input] → L1→L2→...→L32 → [Output2]
+Time 3: [Input] → L1→L2→...→L32 → [Output3]
+
+总时间 = 3 × 32层计算时间
+GPU利用率 = 100%（但串行）</pre>
+                    </div>
+                </div>
+
+                <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);">
+                    <h4 style="color: #fa709a; margin-top: 0;">🔴 流水线并行方式 (PP=2)</h4>
+                    <div style="font-family: monospace; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+<pre style="margin: 0; font-size: 0.9em;">GPU 0: L1-L16    GPU 1: L17-L32
+Time 1: [Input1]→L1-L16 |  等待
+Time 2: [Input2]→L1-L16 | [从GPU0]→L17-L32→[Out1]
+Time 3: [Input3]→L1-L16 | [从GPU0]→L17-L32→[Out2]
+
+总时间 ≈ (初始延迟) + N × 16层计算时间
+两个GPU同时工作！</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 详细的数据流动图 -->
+            <div style="background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);">
+                <h4 style="text-align: center; color: #2c3e50;">📊 数据流动详细过程</h4>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0;">
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; text-align: center; min-width: 120px;">
+                        <strong>输入数据</strong><br>
+                        <small>Token序列<br>[Hello, World, !]</small>
+                    </div>
+                    <div style="font-size: 1.5em; color: #2196f3;">➡️</div>
+                    <div style="background: #4facfe; color: white; padding: 15px; border-radius: 10px; text-align: center; min-width: 150px;">
+                        <strong>Stage 0</strong><br>
+                        <small>GPU 0-7<br>Embedding + L1-L16</small>
+                    </div>
+                    <div style="font-size: 1.5em; color: #2196f3;">➡️</div>
+                    <div style="background: #fa709a; color: white; padding: 15px; border-radius: 10px; text-align: center; min-width: 150px;">
+                        <strong>Stage 1</strong><br>
+                        <small>GPU 8-15<br>L17-L32 + LM Head</small>
+                    </div>
+                    <div style="font-size: 1.5em; color: #2196f3;">➡️</div>
+                    <div style="background: #e8f5e8; padding: 15px; border-radius: 10px; text-align: center; min-width: 120px;">
+                        <strong>输出结果</strong><br>
+                        <small>下一个Token<br>概率分布</small>
+                    </div>
+                </div>
+
+                <div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h5 style="color: #2c3e50; margin-top: 0;">🔍 中间激活值传递细节</h5>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #4facfe;">
+                            <strong>形状变化：</strong><br>
+                            • 输入: [batch_size, seq_len, hidden_size]<br>
+                            • Stage 0输出: [batch_size, seq_len, hidden_size]<br>
+                            • Stage 1输出: [batch_size, seq_len, vocab_size]
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #fa709a;">
+                            <strong>内存占用：</strong><br>
+                            • 激活值大小 ≈ 几百MB到几GB<br>
+                            • 需要缓存中间结果<br>
+                            • 比模型参数小很多
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                            <strong>传输时间：</strong><br>
+                            • 通常 < 1ms (GPU间高速连接)<br>
+                            • 相比计算时间可忽略<br>
+                            • 异步传输优化
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 性能对比 -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 15px; margin: 30px 0;">
+                <h4 style="margin-top: 0; text-align: center;">⚡ 性能提升分析</h4>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; backdrop-filter: blur(10px);">
+                        <h5>🚀 吞吐量提升</h5>
+                        <ul style="line-height: 1.8;">
+                            <li><strong>理论加速比：</strong> ~2倍 (PP=2)</li>
+                            <li><strong>实际加速比：</strong> ~1.7倍 (考虑bubble)</li>
+                            <li><strong>批处理效果：</strong> 批次越大效果越好</li>
+                            <li><strong>延迟影响：</strong> 首批延迟稍高</li>
+                        </ul>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; backdrop-filter: blur(10px);">
+                        <h5>💾 内存优化</h5>
+                        <ul style="line-height: 1.8;">
+                            <li><strong>参数内存：</strong> 减少50% (每个stage)</li>
+                            <li><strong>激活内存：</strong> 需要额外存储中间结果</li>
+                            <li><strong>总体效果：</strong> 支持更大模型</li>
+                            <li><strong>内存均衡：</strong> 各GPU负载平衡</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 对比表格 -->
+        <div class="summary">
+            <h3>📊 策略对比分析</h3>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>特性</th>
+                        <th>张量并行 (TP=8)</th>
+                        <th>流水线并行 (PP=2)</th>
+                        <th>组合策略 (TP=8, PP=2)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>GPU数量</strong></td>
+                        <td>8个GPU</td>
+                        <td>2个GPU组</td>
+                        <td>16个GPU</td>
+                    </tr>
+                    <tr>
+                        <td><strong>内存分布</strong></td>
+                        <td>模型权重分片到8个GPU</td>
+                        <td>不同层分布到不同组</td>
+                        <td>权重分片+层分割</td>
+                    </tr>
+                    <tr>
+                        <td><strong>通信开销</strong></td>
+                        <td>频繁的All-Reduce通信</td>
+                        <td>较少的点对点通信</td>
+                        <td>组内All-Reduce + 组间P2P</td>
+                    </tr>
+                    <tr>
+                        <td><strong>并行效率</strong></td>
+                        <td>同步计算，无流水线</td>
+                        <td>异步流水线，利用率高</td>
+                        <td>结合两者优势</td>
+                    </tr>
+                    <tr>
+                        <td><strong>适用场景</strong></td>
+                        <td>单层计算密集型</td>
+                        <td>深层网络，内存受限</td>
+                        <td>大规模模型推理</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 工作流程 -->
+        <div class="summary">
+            <h3>⚡ 实际工作流程</h3>
+            <div style="background: white; padding: 20px; border-radius: 10px; margin: 15px 0;">
+                <ol style="font-size: 1.1em; line-height: 1.8;">
+                    <li><strong>输入处理：</strong>输入数据进入Pipeline Stage 0</li>
+                    <li><strong>Stage 0计算：</strong>GPU 0-7 进行8路张量并行计算前半部分层</li>
+                    <li><strong>阶段间传递：</strong>激活值从Stage 0传递到Stage 1</li>
+                    <li><strong>Stage 1计算：</strong>GPU 8-15 进行8路张量并行计算后半部分层</li>
+                    <li><strong>输出生成：</strong>最终结果从Stage 1输出</li>
+                </ol>
+            </div>
+
+            <div style="background: #fff3cd; padding: 15px; border-radius: 10px; border-left: 4px solid #ffc107;">
+                <strong>💡 优势：</strong>
+                <ul>
+                    <li>显著减少单GPU内存压力（16倍分摊）</li>
+                    <li>提高计算并行度和吞吐量</li>
+                    <li>支持更大规模模型的高效推理</li>
+                    <li>平衡了计算效率和通信开销</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
