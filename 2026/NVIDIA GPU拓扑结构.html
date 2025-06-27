@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVIDIA NVLinkGPU拓扑结构</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --font-main: 'JetBrains Mono', monospace;
+
+            /* Palette: Technical Light (High Contrast) */
+            --bg-color: #f3f4f6; /* Light Gray */
+            --panel-bg: #ffffff;
+            --panel-border: #e5e7eb;
+
+            --text-primary: #111827; /* Darkest Gray for headings */
+            --text-secondary: #374151; /* Dark Gray for body text */
+            --text-tertiary: #6b7280; /* Medium Gray for subtle text */
+            --text-on-gradient: #ffffff; /* White text for use on dark components */
+
+            --accent-gpu: #16a34a;
+            --accent-gpu-glow: rgba(22, 163, 74, 0.2);
+            --accent-nic: #7c3aed;
+            --accent-nic-glow: rgba(124, 58, 237, 0.2);
+            --accent-nvlink: #059669;
+            --accent-pcie: #d97706;
+            --accent-sys: #dc2626;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-secondary);
+        }
+
+        h1, h2, h3, h4, strong, .font-semibold {
+            color: var(--text-primary);
+        }
+
+        .info-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07);
+        }
+
+        .legend-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+        }
+
+        /* SVG Node and Connection Styles */
+        .gpu-node, .nic-node {
+            stroke-width: 1.5;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+            transition: all 0.3s ease;
+        }
+        .gpu-node { fill: url(#gpuGradient); stroke: var(--accent-gpu); }
+        .nic-node { fill: url(#nicGradient); stroke: var(--accent-nic); }
+
+        .gpu-node:hover {
+            stroke-width: 2.5;
+            filter: drop-shadow(0 4px 8px var(--accent-gpu-glow));
+        }
+        .nic-node:hover {
+            stroke-width: 2.5;
+            filter: drop-shadow(0 4px 8px var(--accent-nic-glow));
+        }
+
+        .nvlink-line { stroke: var(--accent-nvlink); stroke-width: 4; fill: none; }
+        .pcie-line { stroke: var(--accent-pcie); stroke-width: 3; fill: none; }
+        .sys-line { stroke: var(--accent-sys); stroke-width: 2; stroke-dasharray: 8,4; fill: none; }
+
+        /* === SVG Text Contrast Rules === */
+        .node-text { font-weight: 600; }
+        .node-subtext { font-weight: 400; }
+
+        /* Text on top of GRADIENT nodes (GPU, NIC) must be light. */
+        .gpu-node + .node-text, .gpu-node + .node-text + .node-subtext,
+        .nic-node + .node-text, .nic-node + .node-text + .node-subtext {
+            fill: var(--text-on-gradient);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* Text on top of DARK SOLID panels inside the SVG (CPU, Stats) must be light. */
+        .svg-text-on-dark {
+            fill: var(--text-on-gradient);
+            text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+        }
+        .svg-text-on-dark.node-subtext {
+             fill: #d1d5db; /* Slightly dimmer for subtext on dark panels */
+        }
+
+        /* All other text inside the SVG should be dark gray for readability. */
+        .connection-label {
+            fill: var(--text-tertiary);
+            font-weight: 700;
+            text-shadow: none;
+        }
+        .fill-green-400 { fill: var(--accent-gpu); }
+        .fill-blue-400 { fill: #3b82f6; }
+        .fill-purple-400 { fill: var(--accent-nic); }
+        .fill-orange-400 { fill: var(--accent-pcie); }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-full mx-auto">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 bg-clip-text text-transparent mb-2">
+                NVIDIA GPU 系统拓扑结构
+            </h1>
+            <p style="color: var(--text-secondary);" class="text-lg">高性能计算集群架构可视化</p>
+        </div>
+
+        <div class="info-panel rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <span class="w-3 h-3 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mr-3"></span>
+                连接类型图例
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="legend-item rounded-lg p-3 flex items-center space-x-3">
+                    <div class="w-8 h-1" style="background-color: var(--accent-nvlink);"></div>
+                    <span class="font-medium" style="color: var(--text-primary);">NVLink</span>
+                </div>
+                <div class="legend-item rounded-lg p-3 flex items-center space-x-3">
+                    <div class="w-8 h-1" style="background-color: var(--accent-pcie);"></div>
+                    <span class="font-medium" style="color: var(--text-primary);">PCIe桥接</span>
+                </div>
+                <div class="legend-item rounded-lg p-3 flex items-center space-x-3">
+                    <div class="w-8 h-1" style="background-color: var(--accent-sys);"></div>
+                    <span class="font-medium" style="color: var(--text-primary);">系统互连</span>
+                </div>
+                <div class="legend-item rounded-lg p-3 flex items-center space-x-3">
+                    <div class="w-8 h-1 bg-gray-400"></div>
+                    <span class="font-medium" style="color: var(--text-primary);">NUMA节点</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel rounded-xl p-6 overflow-auto">
+            <svg width="1400" height="900" viewBox="0 0 1400 900" class="w-full h-auto">
+                <defs>
+                    <linearGradient id="gpuGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#22c55e;" /><stop offset="100%" style="stop-color:#15803d;" /></linearGradient>
+                    <linearGradient id="nicGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#8b5cf6;" /><stop offset="100%" style="stop-color:#6d28d9;" /></linearGradient>
+                    <linearGradient id="cpuGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#f59e0b;" /><stop offset="100%" style="stop-color:#b45309;" /></linearGradient>
+                </defs>
+
+                <rect x="40" y="80" width="620" height="200" rx="15" fill="rgba(34, 197, 94, 0.05)" stroke="rgba(34, 197, 94, 0.2)" stroke-width="1.5" stroke-dasharray="10,5"/>
+                <text x="350" y="65" text-anchor="middle" class="fill-green-400 text-lg font-bold">NUMA Node 0</text>
+
+                <rect x="720" y="80" width="620" height="200" rx="15" fill="rgba(59, 130, 246, 0.05)" stroke="rgba(59, 130, 246, 0.2)" stroke-width="1.5" stroke-dasharray="10,5"/>
+                <text x="1030" y="65" text-anchor="middle" class="fill-blue-400 text-lg font-bold">NUMA Node 1</text>
+
+                <!-- GPU Nodes -->
+                <g>
+                    <rect x="70" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="120" y="145" text-anchor="middle" class="node-text text-base">GPU0</text>
+                    <text x="120" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="200" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="250" y="145" text-anchor="middle" class="node-text text-base">GPU1</text>
+                    <text x="250" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="330" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="380" y="145" text-anchor="middle" class="node-text text-base">GPU2</text>
+                    <text x="380" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="460" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="510" y="145" text-anchor="middle" class="node-text text-base">GPU3</text>
+                    <text x="510" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="750" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="800" y="145" text-anchor="middle" class="node-text text-base">GPU4</text>
+                    <text x="800" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="880" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="930" y="145" text-anchor="middle" class="node-text text-base">GPU5</text>
+                    <text x="930" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="1010" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="1060" y="145" text-anchor="middle" class="node-text text-base">GPU6</text>
+                    <text x="1060" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+
+                    <rect x="1140" y="120" width="100" height="70" rx="12" class="gpu-node"/>
+                    <text x="1190" y="145" text-anchor="middle" class="node-text text-base">GPU7</text>
+                    <text x="1190" y="165" text-anchor="middle" class="node-subtext text-sm">NV18</text>
+                </g>
+
+                <!-- NIC Nodes -->
+                <g>
+                    <rect x="200" y="350" width="100" height="70" rx="12" class="nic-node"/>
+                    <text x="250" y="375" text-anchor="middle" class="node-text text-base">NIC0</text>
+                    <text x="250" y="395" text-anchor="middle" class="node-subtext text-sm">mlx5_0</text>
+
+                    <rect x="330" y="350" width="100" height="70" rx="12" class="nic-node"/>
+                    <text x="380" y="375" text-anchor="middle" class="node-text text-base">NIC1</text>
+                    <text x="380" y="395" text-anchor="middle" class="node-subtext text-sm">mlx5_1</text>
+
+                    <rect x="460" y="350" width="100" height="70" rx="12" class="nic-node"/>
+                    <text x="510" y="375" text-anchor="middle" class="node-text text-base">NIC2</text>
+                    <text x="510" y="395" text-anchor="middle" class="node-subtext text-sm">mlx5_2</text>
+
+                    <rect x="880" y="350" width="100" height="70" rx="12" class="nic-node"/>
+                    <text x="930" y="375" text-anchor="middle" class="node-text text-base">NIC3</text>
+                    <text x="930" y="395" text-anchor="middle" class="node-subtext text-sm">mlx5_3</text>
+
+                    <rect x="1010" y="350" width="100" height="70" rx="12" class="nic-node"/>
+                    <text x="1060" y="375" text-anchor="middle" class="node-text text-base">NIC4</text>
+                    <text x="1060" y="395" text-anchor="middle" class="node-subtext text-sm">mlx5_4</text>
+                </g>
+
+                <!-- CPU Info Panel -->
+                <g>
+                    <rect x="70" y="500" width="280" height="180" rx="15" fill="url(#cpuGradient)" stroke="#f59e0b" stroke-width="1.5"/>
+                    <text x="210" y="530" text-anchor="middle" class="node-text text-xl svg-text-on-dark">CPU & NUMA</text>
+                    <text x="85" y="555" class="node-text text-sm svg-text-on-dark">CPU Affinity:</text>
+                    <text x="85" y="575" class="node-subtext text-xs svg-text-on-dark">GPU0-3: 0-43,88-131</text>
+                    <text x="85" y="595" class="node-subtext text-xs svg-text-on-dark">GPU4-7: 44-87,132-175</text>
+                    <text x="85" y="620" class="node-text text-sm svg-text-on-dark">NUMA Affinity:</text>
+                    <text x="85" y="640" class="node-subtext text-xs svg-text-on-dark">GPU0-3: NUMA Node 0</text>
+                    <text x="85" y="660" class="node-subtext text-xs svg-text-on-dark">GPU4-7: NUMA Node 1</text>
+                </g>
+
+                <!-- Connections -->
+                <g>
+                    <line x1="170" y1="155" x2="200" y2="155" class="nvlink-line"/><text x="185" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+                    <line x1="300" y1="155" x2="330" y2="155" class="nvlink-line"/><text x="315" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+                    <line x1="430" y1="155" x2="460" y2="155" class="nvlink-line"/><text x="445" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+                    <line x1="850" y1="155" x2="880" y2="155" class="nvlink-line"/><text x="865" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+                    <line x1="980" y1="155" x2="1010" y2="155" class="nvlink-line"/><text x="995" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+                    <line x1="1110" y1="155" x2="1140" y2="155" class="nvlink-line"/><text x="1125" y="150" text-anchor="middle" class="connection-label text-sm">NVL</text>
+
+                    <line x1="250" y1="190" x2="250" y2="350" class="pcie-line"/><text x="265" y="270" class="connection-label text-sm">PIX</text>
+                    <line x1="380" y1="190" x2="380" y2="350" class="pcie-line"/><text x="395" y="270" class="connection-label text-sm">PIX</text>
+                    <line x1="510" y1="190" x2="510" y2="350" class="pcie-line"/><text x="525" y="270" class="connection-label text-sm">PIX</text>
+                    <line x1="930" y1="190" x2="930" y2="350" class="pcie-line"/><text x="945" y="270" class="connection-label text-sm">PIX</text>
+                    <line x1="1060" y1="190" x2="1060" y2="350" class="pcie-line"/><text x="1075" y="270" class="connection-label text-sm">PIX</text>
+
+                    <line x1="70" y1="230" x2="1240" y2="230" class="sys-line"/><text x="655" y="225" text-anchor="middle" class="connection-label text-sm">系统互连总线 (SYS)</text>
+                    <line x1="120" y1="190" x2="120" y2="230" class="sys-line"/>
+                    <line x1="250" y1="190" x2="250" y2="230" class="sys-line"/>
+                    <line x1="380" y1="190" x2="380" y2="230" class="sys-line"/>
+                    <line x1="510" y1="190" x2="510" y2="230" class="sys-line"/>
+                    <line x1="800" y1="190" x2="800" y2="230" class="sys-line"/>
+                    <line x1="930" y1="190" x2="930" y2="230" class="sys-line"/>
+                    <line x1="1060" y1="190" x2="1060" y2="230" class="sys-line"/>
+                    <line x1="1190" y1="190" x2="1190" y2="230" class="sys-line"/>
+                </g>
+
+                <!-- Stats Panel -->
+                <g>
+                    <rect x="950" y="500" width="380" height="280" rx="15" fill="#1f2937" stroke="#4b5563" stroke-width="1.5"/>
+                    <text x="1140" y="530" text-anchor="middle" class="node-text text-xl svg-text-on-dark">系统配置统计</text>
+
+                    <circle cx="970" cy="555" r="4" class="fill-green-400"/>
+                    <text x="985" y="560" class="node-text text-sm svg-text-on-dark">GPU数量: 8个 (NV18)</text>
+
+                    <circle cx="970" cy="580" r="4" class="fill-purple-400"/>
+                    <text x="985" y="585" class="node-text text-sm svg-text-on-dark">NIC数量: 5个 (ConnectX-5)</text>
+
+                    <circle cx="970" cy="605" r="4" class="fill-green-400"/>
+                    <text x="985" y="610" class="node-text text-sm svg-text-on-dark">NVLink连接: 6条</text>
+
+                    <circle cx="970" cy="630" r="4" class="fill-orange-400"/>
+                    <text x="985" y="635" class="node-text text-sm svg-text-on-dark">PCIe桥接: 5条</text>
+
+                    <circle cx="970" cy="655" r="4" class="fill-blue-400"/>
+                    <text x="985" y="660" class="node-text text-sm svg-text-on-dark">NUMA节点: 2个</text>
+
+                    <rect x="965" y="680" width="350" height="80" rx="8" fill="rgba(55, 65, 81, 0.8)" stroke="#6b7280" stroke-width="1"/>
+                    <text x="1140" y="700" text-anchor="middle" class="node-subtext text-sm svg-text-on-dark">性能特征</text>
+                    <text x="975" y="720" class="node-subtext text-xs svg-text-on-dark">• 高带宽GPU间通信 (NVLink)</text>
+                    <text x="975" y="735" class="node-subtext text-xs svg-text-on-dark">• NUMA优化的内存访问</text>
+                    <text x="975" y="750" class="node-subtext text-xs svg-text-on-dark">• 分布式训练就绪配置</text>
+                </g>
+            </svg>
+        </div>
+
+        <!-- Bottom Info Cards -->
+        <div class="mt-6 grid md:grid-cols-3 gap-6">
+            <div class="info-panel rounded-xl p-6">
+                <div class="flex items-center mb-4">
+                    <div class="w-8 h-8 rounded-lg mr-3" style="background-color: var(--accent-gpu);"></div>
+                    <h3 class="text-lg font-semibold">GPU集群</h3>
+                </div>
+                <p class="text-sm leading-relaxed">
+                    8个高性能GPU通过NVLink技术实现直接互连，提供超高带宽的GPU间通信。
+                    NV18架构支持大规模并行计算和深度学习训练任务。
+                </p>
+            </div>
+
+            <div class="info-panel rounded-xl p-6">
+                <div class="flex items-center mb-4">
+                    <div class="w-8 h-8 rounded-lg mr-3" style="background-color: var(--accent-nic);"></div>
+                    <h3 class="text-lg font-semibold">网络架构</h3>
+                </div>
+                <p class="text-sm leading-relaxed">
+                    5个Mellanox ConnectX-5网络接口提供高性能网络连接。
+                    通过PCIe桥接与GPU直连，优化分布式训练的网络通信性能。
+                </p>
+            </div>
+
+            <div class="info-panel rounded-xl p-6">
+                <div class="flex items-center mb-4">
+                    <div class="w-8 h-8 rounded-lg mr-3" style="background-color: var(--accent-pcie);"></div>
+                    <h3 class="text-lg font-semibold">NUMA优化</h3>
+                </div>
+                <p class="text-sm leading-relaxed">
+                    双NUMA节点架构确保最佳的内存访问性能。
+                    CPU核心与GPU的智能绑定减少跨节点访问延迟，提升整体系统效率。
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
