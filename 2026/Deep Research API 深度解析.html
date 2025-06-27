@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research API 深度解析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        pre::-webkit-scrollbar {
+            height: 8px; width: 8px; background-color: #374151; border-radius: 4px;
+        }
+        pre::-webkit-scrollbar-thumb {
+            background-color: #7c3aed; /* violet-600 */
+            border-radius: 4px;
+        }
+        pre::-webkit-scrollbar-thumb:hover {
+            background-color: #6d28d9; /* violet-700 */
+        }
+
+        .slide {
+            opacity: 0; transition: opacity 0.7s ease-in-out;
+            min-height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: 2rem 1rem 4rem 1rem;
+        }
+        .slide.active { opacity: 1; }
+        .slide .content-wrapper { width: 80%; max-width: 1000px; }
+
+        .text-content p, .text-content li {
+            line-height: 1.8; margin-bottom: 1.25rem; font-size: 1.1rem;
+        }
+        .text-content h2 { margin-bottom: 1.75rem; font-size: 2.25rem; }
+        .text-content h3 { margin-bottom: 1.25rem; font-size: 1.75rem; }
+        .text-content ul { list-style-type: disc; list-style-position: outside; padding-left: 1.75rem; }
+        .text-content code { background-color: #374151; color: #e5e7eb; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em;}
+        .slide img {
+            max-width: 85%; height: auto; margin: 1.5rem auto;
+            border-radius: 0.75rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.2);
+        }
+
+        pre { padding: 1rem; line-height: 1.6; font-size: 0.9rem; background-color: #1f2937; border-radius: 0.375rem; color: #d1d5db; }
+        .python-keyword { color: #c4b5fd; }
+        .python-string { color: #a5d6a7; }
+        .python-function { color: #81d4fa; }
+        .python-variable { color: #f3f4f6; }
+        .python-comment { color: #6b7280; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-200 font-sans">
+
+    <div id="presentation-container" class="relative w-full min-h-screen overflow-y-auto">
+
+        <!-- Slide 1: Title Slide -->
+        <div class="slide p-8 flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-violet-900 to-gray-900 text-center">
+            <div class="w-full max-w-4xl">
+                <h1 class="text-5xl md:text-6xl font-extrabold mb-6 text-violet-300 drop-shadow-lg">
+                    Deep Research API 深度解析
+                </h1>
+                <h2 class="text-3xl md:text-4xl font-semibold mb-8 text-violet-200">
+                    自动化复杂研究工作流
+                </h2>
+                <p class="text-sm text-gray-400 mt-12">基于 OpenAI Cookbook 重构与解析</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: What is the Deep Research API? -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">什么是 Deep Research API？</h2>
+                <p>Deep Research API 旨在自动化需要<span class="text-violet-300 font-semibold">推理、规划和综合</span>真实世界信息的复杂研究工作流。</p>
+                <p>它接收一个高层次的查询，通过一个能够<span class="text-violet-300 font-semibold">分解任务、执行网络搜索并整合结果</span>的 Agent 模型，最终返回一份结构化、富含引用的报告。</p>
+                <p>与 ChatGPT 将此过程抽象化不同，该 API 提供了直接的程序化访问，让开发者能将强大的研究能力集成到自己的应用中。</p>
+            </div>
+        </div>
+
+        <!-- Slide 3: Available Models -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">可用模型</h3>
+                <p>您可以通过 `responses` 端点访问 Deep Research，支持以下模型：</p>
+                <ul class="list-disc space-y-4 mt-6">
+                    <li>
+                        <code>o3-deep-research-2025-06-26</code>
+                        <p class="text-sm text-gray-400 ml-4">优化用于深度综合和更高质量的输出。</p>
+                    </li>
+                    <li>
+                        <code>o4-mini-deep-research-2025-06-26</code>
+                        <p class="text-sm text-gray-400 ml-4">轻量且速度更快，非常适合对延迟敏感的用例。</p>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 4: Setup -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">环境设置</h2>
+                <h3 class="font-semibold text-violet-300 mt-4">1. 安装依赖</h3>
+                <p>安装最新版本的 OpenAI Python SDK。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-bash">pip install --upgrade openai</code></pre>
+                </div>
+                <h3 class="font-semibold text-violet-300 mt-6">2. 身份验证</h3>
+                <p>导入 OpenAI 客户端并使用您的 API 密钥进行初始化。</p>
+                 <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-keyword">from</span> openai <span class="python-keyword">import</span> OpenAI
+
+<span class="python-comment"># 建议使用环境变量来管理您的密钥</span>
+<span class="python-comment"># import os</span>
+<span class="python-comment"># OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")</span>
+
+<span class="python-variable">client</span> = OpenAI(api_key=<span class="python-string">"YOUR_OPENAI_API_KEY"</span>)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Getting Started - The Use Case -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">开始使用：一个实例</h2>
+                <p>假设我们是一家医疗保健金融服务公司的研究员，任务是就用于治疗2型糖尿病和肥胖症的药物（特别是司美格鲁肽）的经济影响，生成一份深度报告。</p>
+                <p>我们的目标是<span class="text-violet-300">综合临床结果、成本效益和区域定价数据</span>，形成一份结构化、有引用的分析，为投资、支付方策略或政策建议提供信息。</p>
+            </div>
+        </div>
+
+        <!-- Slide 6: Configuring the Request -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">配置您的研究请求</h3>
+                <p>要开始，我们需要：</p>
+                <ul class="list-disc space-y-2">
+                    <li>在<span class="text-violet-300">系统消息 (system message)</span>中设定我们的角色，概述我们希望生成的报告类型。</li>
+                    <li>设置 `summary` 参数为 `"auto"` 以获得最佳可用摘要。</li>
+                    <li>包含必需的工具，如 `web_search_preview`，并可选地添加 `code_interpreter`。</li>
+                    <li>将 `background` 参数设置为 `True` (虽然代码示例中未显式展示，但这是推荐的最佳实践)。这能让请求异步运行，无需担心超时或连接问题。</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 7: Example API Call -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">API 调用示例</h3>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono max-h-[75vh]">
+                    <pre><code class="language-python">
+<span class="python-variable">system_message</span> = <span class="python-string">"""
+您是一名专业研究员，代表全球健康经济学团队准备一份结构化的、数据驱动的报告。您的任务是分析用户提出的健康问题。
+
+要求：
+- 专注于数据丰富的见解：包括具体数字、趋势、统计数据和可衡量的结果。
+- 适当时，以可制成图表或表格的方式总结数据，并在回应中指出。
+- 优先考虑可靠、最新的来源：同行评议的研究、卫生组织、监管机构或制药公司财报。
+- 包括内联引用并返回所有源元数据。
+
+请保持分析性，避免泛泛而谈，并确保每个部分都支持可为医疗保健政策或金融建模提供信息的数据支持的推理。
+"""</span>
+
+<span class="python-variable">user_query</span> = <span class="python-string">"研究司美格鲁肽对全球医疗保健系统的经济影响。"</span>
+
+<span class="python-variable">response</span> = client.responses.create(
+  model=<span class="python-string">"o3-deep-research"</span>,
+  input=[
+    {
+      <span class="python-string">"role"</span>: <span class="python-string">"developer"</span>,
+      <span class="python-string">"content"</span>: [{<span class="python-string">"type"</span>: <span class="python-string">"input_text"</span>, <span class="python-string">"text"</span>: system_message}]
+    },
+    {
+      <span class="python-string">"role"</span>: <span class="python-string">"user"</span>,
+      <span class="python-string">"content"</span>: [{<span class="python-string">"type"</span>: <span class="python-string">"input_text"</span>, <span class="python-string">"text"</span>: user_query}]
+    }
+  ],
+  reasoning={
+    <span class="python-string">"summary"</span>: <span class="python-string">"auto"</span>
+  },
+  tools=[
+    {<span class="python-string">"type"</span>: <span class="python-string">"web_search_preview"</span>},
+    {<span class="python-string">"type"</span>: <span class="python-string">"code_interpreter"</span>, <span class="python-string">"container"</span>: {<span class="python-string">"type"</span>: <span class="python-string">"auto"</span>, <span class="python-string">"file_ids"</span>: []}}
+  ]
+)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Parsing the Response - Final Report -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">解析响应 (1/3): 提取最终报告</h2>
+                <p>Deep Research API 的响应包含一个结构化的最终答案，以及内联引用、推理步骤摘要和源元数据。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-comment"># 从响应对象中访问最终报告</span>
+print(response.output[-<span class="python-number">1</span>].content[<span class="python-number">0</span>].text)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Parsing the Response - Citations -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">访问内联引用与元数据</h3>
+                <p>响应文本中的内联引用被注释并链接到其对应的源元数据。每个注释包含：</p>
+                <ul class="list-disc space-y-1">
+                    <li><code>start_index</code> 和 <code>end_index</code>：引文在文本中对应的字符跨度。</li>
+                    <li><code>title</code>：来源的简要标题。</li>
+                    <li><code>url</code>：完整的来源URL。</li>
+                </ul>
+                <p>这种结构允许您构建引用列表、在下游应用中添加可点击的超链接，并在报告中高亮和追溯有数据支持的声明。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-variable">annotations</span> = response.output[-<span class="python-number">1</span>].content[<span class="python-number">0</span>].annotations
+<span class="python-keyword">for</span> i, citation <span class="python-keyword">in</span> enumerate(annotations):
+    print(f<span class="python-string">"Citation {i+1}:"</span>)
+    print(f<span class="python-string">"  Title: {citation.title}"</span>)
+    print(f<span class="python-string">"  URL: {citation.url}"</span>)
+    print(f<span class="python-string">"  Location: chars {citation.start_index}–{citation.end_index}"</span>)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Parsing the Response - Intermediate Steps -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">解析响应 (2/3): 检查中间步骤</h2>
+                <p>Deep Research API 还公开了 Agent 采取的所有中间步骤，包括<span class="text-violet-300">推理步骤、网络搜索调用和代码执行</span>。您可以使用这些来调试、分析或可视化最终答案是如何构建的。</p>
+                <p>每个中间步骤都存储在 `response.output` 中，其 `type` 字段表明了它的种类。</p>
+            </div>
+        </div>
+
+        <!-- Slide 11: Intermediate Steps - Reasoning & Search -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">推理步骤与网络搜索</h3>
+                <p><strong>推理步骤 (Reasoning Step):</strong> 这些是模型在思考子问题时生成的内部摘要或计划。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono mb-6">
+                    <pre><code class="language-python">
+<span class="python-variable">reasoning</span> = next(item <span class="python-keyword">for</span> item <span class="python-keyword">in</span> response.output <span class="python-keyword">if</span> item.type == <span class="python-string">"reasoning"</span>)
+<span class="python-keyword">for</span> s <span class="python-keyword">in</span> reasoning.summary:
+    print(s.text)
+                    </code></pre>
+                </div>
+                <p><strong>网络搜索调用 (Web Search Call):</strong> 这些显示了执行了哪些搜索查询，可以帮助您追溯模型检索了哪些信息。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono">
+                    <pre><code class="language-python">
+<span class="python-variable">search</span> = next(item <span class="python-keyword">for</span> item <span class="python-keyword">in</span> response.output <span class="python-keyword">if</span> item.type == <span class="python-string">"web_search_call"</span>)
+print(<span class="python-string">"Query:"</span>, search.action[<span class="python-string">"query"</span>])
+print(<span class="python-string">"Status:"</span>, search.status)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 12: Parsing the Response - MCP -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">解析响应 (3/3): 集成私有知识 (MCP)</h2>
+                <p>如果您希望在 Deep Research 任务中引入您自己的内部文档，可以使用<span class="text-violet-300">模型上下文协议 (MCP)</span> 工具。</p>
+                <p>Deep Research 模型和 Responses API 都支持基于 MCP 的工具，因此您可以扩展它们以查询您的私有知识库或其他第三方服务。</p>
+                 <p>在下面的示例中，我们配置一个 MCP 工具，让 Deep Research 能够按需获取您组织内部的司美格鲁肽研究报告。MCP 服务器是对 OpenAI 文件存储服务的代理，它会自动向量化您上传的文件以实现高效检索。</p>
+            </div>
+        </div>
+
+        <!-- Slide 13: MCP Integration - Code Example -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">MCP 集成代码示例</h3>
+                <p>只需在 `tools` 列表中添加一个 `mcp` 类型的工具，并提供您的 MCP 服务器 URL。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono max-h-[70vh]">
+                    <pre><code class="language-python">
+<span class="python-comment"># 在 system_message 中可以引导模型使用内部文件查找工具</span>
+
+<span class="python-variable">response</span> = client.responses.create(
+  model=<span class="python-string">"o3-deep-research-2025-06-26"</span>,
+  input=[...], <span class="python-comment"># 同前</span>
+  reasoning={<span class="python-string">"summary"</span>: <span class="python-string">"auto"</span>},
+  tools=[
+    {<span class="python-string">"type"</span>: <span class="python-string">"web_search_preview"</span>},
+    { <span class="python-comment"># 添加 MCP 工具支持</span>
+      <span class="python-string">"type"</span>: <span class="python-string">"mcp"</span>,
+      <span class="python-string">"server_label"</span>: <span class="python-string">"internal_file_lookup"</span>,
+      <span class="python-string">"server_url"</span>: <span class="python-string">"https://<your_mcp_server>/sse/"</span>, <span class="python-comment"># 更新为您的 MCP 服务器位置</span>
+      <span class="python-string">"require_approval"</span>: <span class="python-string">"never"</span>
+    }
+  ]
+)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 14: Reviewing MCP Response -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                 <h3 class="font-semibold text-violet-300 text-center">审查包含 MCP 的响应</h3>
+                 <p>您可以检查报告中来自 MCP 的引用，并查看模型调用 MCP 工具的记录。</p>
+                <div class="bg-gray-800 rounded-lg shadow-xl w-full text-left overflow-x-auto font-mono max-h-[70vh]">
+                    <pre><code class="language-python">
+<span class="python-variable">report_text</span> = response.output[-<span class="python-number">1</span>].content[<span class="python-number">0</span>].text
+print(<span class="python-string">"REPORT EXCERPT:"</span>, report_text[:<span class="python-number">100</span>])
+
+<span class="python-variable">annotations</span> = response.output[-<span class="python-number">1</span>].content[<span class="python-number">0</span>].annotations
+<span class="python-variable">target_url</span> = <span class="python-string">"https://platform.openai.com/storage/files"</span> <span class="python-comment"># 示例 URL 前缀</span>
+
+<span class="python-keyword">for</span> citation <span class="python-keyword">in</span> annotations:
+    <span class="python-keyword">if</span> citation.url.startswith(target_url):
+        print(<span class="python-string">"MCP CITATION SAMPLE:"</span>)
+        print(f<span class="python-string">"  Title: {citation.title}"</span>)
+        <span class="python-comment"># ... 更多打印细节 ...</span>
+        <span class="python-keyword">break</span>
+
+print(<span class="python-string">"--------"</span>)
+
+<span class="python-comment"># 打印 MCP 工具调用</span>
+<span class="python-variable">calls</span> = [
+    (item.name, item.server_label, item.arguments)
+    <span class="python-keyword">for</span> item <span class="python-keyword">in</span> response.output
+    <span class="python-keyword">if</span> item.type == <span class="python-string">"mcp_call"</span> <span class="python-keyword">and</span> item.arguments
+]
+<span class="python-keyword">for</span> name, server, args <span class="python-keyword">in</span> calls:
+    print(f<span class="python-string">"{name}@{server} → {args}"</span>)
+                    </code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 15: Clarifying Questions - The Challenge -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                 <h2 class="font-bold text-violet-400 text-center">澄清式提问：API 与 ChatGPT 的差异</h2>
+                 <p>您可能注意到，在 ChatGPT 中使用 Deep Research 时，它常会先提问以澄清您的意图。</p>
+                 <img src="https://cookbook.openai.com/images/intro_dr.png" alt="澄清式提问流程图">
+                 <p>这是因为 ChatGPT 使用一个中间模型来帮助收集更多上下文。而 Deep Research API 则跳过了这一步，它期望接收到<span class="text-violet-300">已完全成形的提示</span>。这对开发者提出了更高的要求，但也给予了更大的控制权。</p>
+            </div>
+        </div>
+
+        <!-- Slide 16: Solution: The Two-Step Prompting Strategy -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h3 class="font-semibold text-violet-300 text-center">解决方案：两步提示策略</h3>
+                <p>为了从 API 获得稳定、高质量的输出，我们可以采用一个两步策略：</p>
+                <ol class="list-decimal space-y-4">
+                    <li>
+                        <strong>第一步：澄清 (Clarify)</strong><br>
+                        当用户输入模糊查询（如“帮我计划一次法国之旅”）时，先用一个轻量级模型（如`gpt-4.1`）和一个“澄清式提示 (clarifying prompt)”来向用户提出具体问题，以收集关键信息（如时间、预算、兴趣等）。
+                    </li>
+                     <li>
+                        <strong>第二步：重写 (Rewrite)</strong><br>
+                        在收集到用户的详细信息后，再用另一个“重写提示 (rewriting prompt)”将这些信息整合成一个结构清晰、内容详尽的指令，然后将其传递给 Deep Research 模型。
+                    </li>
+                </ol>
+                <p>这个策略确保了 Deep Research API 总是能接收到它最需要的高质量输入。</p>
+            </div>
+        </div>
+
+        <!-- Slide 17: Final Use Cases & Conclusion -->
+        <div class="slide bg-gray-900 hidden">
+            <div class="content-wrapper text-content">
+                <h2 class="font-bold text-violet-400 text-center">应用场景与结论</h2>
+                <p>Deep Research 在需要基于真实世界证据、生成结构化、有引用支持的答案时表现出色。一些典型的用例包括：</p>
+                <ul class="list-disc space-y-2">
+                    <li>产品比较和市场分析</li>
+                    <li>竞争情报和战略报告</li>
+                    <li>技术文献综述和政策综合</li>
+                </ul>
+                 <p class="mt-6">无论您是想构建研究 Agent、生成结构化报告，还是将高质量的综合分析集成到您的工作流中，希望这里的示例能帮助您入门。</p>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 flex space-x-4 z-20">
+            <button id="prevBtn" class="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled aria-label="上一页">
+                ← 上一页
+            </button>
+            <button id="nextBtn" class="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105" aria-label="下一页">
+                下一页 →
+            </button>
+        </div>
+        <div class="fixed bottom-1 left-1/2 -translate-x-1/2 text-xs text-gray-500 z-20">
+            <span id="slideCounter"></span>
+        </div>
+
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const slideCounter = document.getElementById('slideCounter');
+        let currentSlide = 0;
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.remove('hidden');
+                    setTimeout(() => slide.classList.add('active'), 10);
+                } else {
+                    if (!slide.classList.contains('active')) {
+                         slide.classList.add('hidden');
+                    }
+                }
+            });
+            updateButtons();
+            updateSlideCounter();
+        }
+
+        function updateButtons() {
+            prevBtn.disabled = currentSlide === 0;
+            nextBtn.disabled = currentSlide === slides.length - 1;
+        }
+
+        function updateSlideCounter() {
+            slideCounter.textContent = `第 ${currentSlide + 1} 页 / 共 ${slides.length} 页`;
+        }
+
+        function nextSlide() {
+            if (currentSlide < slides.length - 1) {
+                slides[currentSlide].classList.remove('active');
+                setTimeout(() => {
+                    slides[currentSlide].classList.add('hidden');
+                    currentSlide++;
+                    showSlide(currentSlide);
+                }, 350);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                slides[currentSlide].classList.remove('active');
+                setTimeout(() => {
+                    slides[currentSlide].classList.add('hidden');
+                    currentSlide--;
+                    showSlide(currentSlide);
+                }, 350);
+            }
+        }
+
+        prevBtn.addEventListener('click', prevSlide);
+        nextBtn.addEventListener('click', nextSlide);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        showSlide(currentSlide);
+    </script>
+</body>
+</html>
